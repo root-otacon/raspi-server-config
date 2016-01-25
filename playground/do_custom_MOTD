@@ -1,4 +1,4 @@
-do_update() {
+do_custom_MOTD() {
   apt-get update &&
   apt-get install raspi-config &&
   printf "Sleeping 5 seconds before reloading raspi-config\n" &&
