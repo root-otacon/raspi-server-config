@@ -37,7 +37,6 @@ do_set_ip() {
 Please note: RFCs mandate that a hostname's labels \
 may contain only the ASCII letters 'a' through 'z' (case-insensitive), 
 the digits '0' through '9', and the hyphen.
-Hostname labels cannot begin or end with a hyphen. 
 No other symbols, punctuation characters, or blank spaces are permitted.\
 " 20 70 1
   fi
