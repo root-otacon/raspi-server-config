@@ -6,5 +6,5 @@ while read p; do
 	final+="$data "
 done < $1
 apt-get purge $final
-sed 'auto lo/i eth0' /etc/network/interfaces
+sed '/^auto lo$/a eth0' /etc/network/interfaces
 }
