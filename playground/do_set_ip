@@ -1,0 +1,51 @@
+  if [ "$INTERACTIVE" = True ]; then
+    whiptail --msgbox "\
+Please set use one of this two options.\
+" 20 70 1
+    IPADDR=$(whiptail --menu "IP Options" 20 60 10 \
+      "DHCP" "Dynamic IP Configuration (default)" \
+      "Static" "Static IP Adress configuration" \
+      3>&1 1>&2 2>&3)
+  else
+    IPADDR=$1
+    true
+  fi
+  if [ $? -eq 0 ]; then
+    case "$IPADDR" in
+      DHCP)
+        set_dhcp_ipaddr
+        ;;
+      Static)
+        set_ipaddr static
+        ;;
+    esac
+  fi
+}
+
+set_dhcp_ipaddr() {
+do_set_ip() {
+  if [ "$INTERACTIVE" = True ]; then
+    whiptail --msgbox "\
+Please note: RFCs mandate that a hostname's labels \
+may contain only the ASCII letters 'a' through 'z' (case-insensitive), 
+the digits '0' through '9', and the hyphen.
+No other symbols, punctuation characters, or blank spaces are permitted.\
+" 20 70 1
+  fi
+  CURRENT_IP=`ipaddr eth0`
+  if [ "$INTERACTIVE" = True ]; then
+    NEW_IPADDR=$(whiptail --inputbox "Please enter a IP" 20 60 "$CURRENT_IP" 3>&1 1>&2 2>&3)
+	NEW_SNM=$(whiptail --inputbox "Please enter a Subnetmask" 20 60 "$CURRENT_SNM" 3>&1 1>&2 2>&3)
+	NEW_GW=$(whiptail --inputbox "Please enter a Gatway" 20 60 "$CURRENT_GW" 3>&1 1>&2 2>&3)
+  else
+    NEW_IPADDR=$1
+	NEW_SNM=$2
+	NEW_GW=$3
+    true
+  fi
+  if [ $? -eq 0 ]; then
+    echo $NEW_IPADDR > /etc/network/interfaces
+    sed -i "s/127.0.1.1.*$CURRENT_HOSTNAME/127.0.1.1\t$NEW_HOSTNAME/g" /etc/hosts
+    ASK_TO_REBOOT=1
+  fi
+}
