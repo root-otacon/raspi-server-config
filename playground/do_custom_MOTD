@@ -1,7 +1,13 @@
 do_custom_MOTD() {
-  apt-get update &&
-  apt-get install raspi-config &&
-  printf "Sleeping 5 seconds before reloading raspi-config\n" &&
-  sleep 5 &&
-  exec raspi-config
+ # now set up an users.profiles 
+ cat <<EOF > /users/.users.profile &&
+
+
+
+
+
+
+
+
+EOF
 }
