@@ -1,0 +1,7 @@
+do_remove_desktop() {
+  apt-get update &&
+  apt-get install raspi-config &&
+  printf "Sleeping 5 seconds before reloading raspi-config\n" &&
+  sleep 5 &&
+  exec raspi-config
+}
