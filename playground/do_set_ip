@@ -49,3 +49,10 @@ No other symbols, punctuation characters, or blank spaces are permitted.\
     ASK_TO_REBOOT=1
   fi
 }
+
+
+
+sed -i s/iface*/iface eth0 inet dhcp/g" /etc/network/interfaces
+
+
+sed 'auto lo/i eth0' /etc/network/interfaces
