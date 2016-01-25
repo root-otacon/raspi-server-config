@@ -19,9 +19,6 @@ get_init_sys() {
   fi
 }
 
-calc_wt_size() {
-}
-
 do_about() {
   whiptail --msgbox "\
 This tool provides a straight-forward way of doing initial
@@ -185,41 +182,6 @@ disable_raspi_config_at_boot() {
   fi
 }
 
-do_boot_behaviour_new() {
-}
-
-do_wait_for_network() {
-}
-
-do_boot_behaviour() {
-}
-
-do_rastrack() {
-}
-
-set_camera() {
-}
-
-do_camera() {
-}
-
-
-set_gldriver() {
-}
-
-do_gldriver() {
-}
-
-do_update() {
-  apt-get update &&
-  apt-get install raspi-config &&
-  printf "Sleeping 5 seconds before reloading raspi-config\n" &&
-  sleep 5 &&
-  exec raspi-config
-}
-
-do_audio() {
-}
 
 do_finish() {
   disable_raspi_config_at_boot
@@ -274,42 +236,11 @@ do
   esac
 done
 
-#if [ "GET" = "${OPT_MEMORY_SPLIT:-}" ]; then
-#  set -u # Fail on unset variables
-#  get_current_memory_split
-#  echo $CURRENT_MEMSPLIT
-#  exit 0
-#fi
-
 # Everything else needs to be run as root
 if [ $(id -u) -ne 0 ]; then
   printf "Script must be run as root. Try 'sudo raspi-config'\n"
   exit 1
 fi
-
-if [ -n "${OPT_MEMORY_SPLIT:-}" ]; then
-  set -e # Fail when a command errors
-  set_memory_split "${OPT_MEMORY_SPLIT}"
-  exit 0
-fi
-
-do_internationalisation_menu() {
-  FUN=$(whiptail --title "Raspberry Pi Software Configuration Tool (raspi-config)" --menu "Internationalisation Options" $WT_HEIGHT $WT_WIDTH $WT_MENU_HEIGHT --cancel-button Back --ok-button Select \
-    "I1 Change Locale" "Set up language and regional settings to match your location" \
-    "I2 Change Timezone" "Set up timezone to match your location" \
-    "I3 Change Keyboard Layout" "Set the keyboard layout to match your keyboard" \
-    3>&1 1>&2 2>&3)
-  RET=$?
-  if [ $RET -eq 1 ]; then
-    return 0
-  elif [ $RET -eq 0 ]; then
-    case "$FUN" in
-      I1\ *) do_change_locale ;;
-      I2\ *) do_change_timezone ;;
-      I3\ *) do_configure_keyboard ;;
-      *) whiptail --msgbox "Programmer error: unrecognized option" 20 60 1 ;;
-    esac || whiptail --msgbox "There was an error running option $FUN" 20 60 1
-  fi
 }
 
 do_monitoring_tools() {
