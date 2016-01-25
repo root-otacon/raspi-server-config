@@ -20,19 +20,6 @@ get_init_sys() {
 }
 
 calc_wt_size() {
-  # NOTE: it's tempting to redirect stderr to /dev/null, so supress error 
-  # output from tput. However in this case, tput detects neither stdout or 
-  # stderr is a tty and so only gives default 80, 24 values
-  WT_HEIGHT=17
-  WT_WIDTH=$(tput cols)
-
-  if [ -z "$WT_WIDTH" ] || [ "$WT_WIDTH" -lt 60 ]; then
-    WT_WIDTH=80
-  fi
-  if [ "$WT_WIDTH" -gt 178 ]; then
-    WT_WIDTH=120
-  fi
-  WT_MENU_HEIGHT=$(($WT_HEIGHT-7))
 }
 
 do_about() {
@@ -44,112 +31,31 @@ you have heavily customised your installation.\
 " 20 70 1
 }
 
-do_expand_rootfs() {
-  get_init_sys
-  if [ $SYSTEMD -eq 1 ]; then
-    ROOT_PART=$(mount | sed -n 's|^/dev/\(.*\) on / .*|\1|p')
-  else
-    if ! [ -h /dev/root ]; then
-      whiptail --msgbox "/dev/root does not exist or is not a symlink. Don't know how to expand" 20 60 2
-      return 0
-    fi
-    ROOT_PART=$(readlink /dev/root)
-  fi
-
-  PART_NUM=${ROOT_PART#mmcblk0p}
-  if [ "$PART_NUM" = "$ROOT_PART" ]; then
-    whiptail --msgbox "$ROOT_PART is not an SD card. Don't know how to expand" 20 60 2
-    return 0
-  fi
-
-  # NOTE: the NOOBS partition layout confuses parted. For now, let's only 
-  # agree to work with a sufficiently simple partition layout
-  if [ "$PART_NUM" -ne 2 ]; then
-    whiptail --msgbox "Your partition layout is not currently supported by this tool. You are probably using NOOBS, in which case your root filesystem is already expanded anyway." 20 60 2
-    return 0
-  fi
-
-  LAST_PART_NUM=$(parted /dev/mmcblk0 -ms unit s p | tail -n 1 | cut -f 1 -d:)
-  if [ $LAST_PART_NUM -ne $PART_NUM ]; then
-    whiptail --msgbox "$ROOT_PART is not the last partition. Don't know how to expand" 20 60 2
-    return 0
-  fi
-
-  # Get the starting offset of the root partition
-  PART_START=$(parted /dev/mmcblk0 -ms unit s p | grep "^${PART_NUM}" | cut -f 2 -d: | sed 's/[^0-9]//g')
-  [ "$PART_START" ] || return 1
-  # Return value will likely be error for fdisk as it fails to reload the
-  # partition table because the root fs is mounted
-  fdisk /dev/mmcblk0 <<EOF
-p
-d
-$PART_NUM
-n
-p
-$PART_NUM
-$PART_START
-
-p
-w
-EOF
-  ASK_TO_REBOOT=1
-
-  # now set up an init.d script
-cat <<EOF > /etc/init.d/resize2fs_once &&
-#!/bin/sh
-### BEGIN INIT INFO
-# Provides:          resize2fs_once
-# Required-Start:
-# Required-Stop:
-# Default-Start: 3
-# Default-Stop:
-# Short-Description: Resize the root filesystem to fill partition
-# Description:
-### END INIT INFO
-
-. /lib/lsb/init-functions
-
-case "\$1" in
-  start)
-    log_daemon_msg "Starting resize2fs_once" &&
-    resize2fs /dev/$ROOT_PART &&
-    update-rc.d resize2fs_once remove &&
-    rm /etc/init.d/resize2fs_once &&
-    log_end_msg \$?
-    ;;
-  *)
-    echo "Usage: \$0 start" >&2
-    exit 3
-    ;;
-esac
-EOF
-  chmod +x /etc/init.d/resize2fs_once &&
-  update-rc.d resize2fs_once defaults &&
+do_set_ip() {
   if [ "$INTERACTIVE" = True ]; then
-    whiptail --msgbox "Root partition has been resized.\nThe filesystem will be enlarged upon the next reboot" 20 60 2
+    whiptail --msgbox "\
+Please note: RFCs mandate that a hostname's labels \
+may contain only the ASCII letters 'a' through 'z' (case-insensitive), 
+the digits '0' through '9', and the hyphen.
+Hostname labels cannot begin or end with a hyphen. 
+No other symbols, punctuation characters, or blank spaces are permitted.\
+" 20 70 1
   fi
-}
+  CURRENT_HOSTNAME=`cat /etc/hostname | tr -d " \t\n\r"`
+  if [ "$INTERACTIVE" = True ]; then
+    NEW_HOSTNAME=$(whiptail --inputbox "Please enter a hostname" 20 60 "$CURRENT_HOSTNAME" 3>&1 1>&2 2>&3)
+  else
+    NEW_HOSTNAME=$1
+    true
+  fi
+  if [ $? -eq 0 ]; then
+    echo $NEW_HOSTNAME > /etc/hostname
+    sed -i "s/127.0.1.1.*$CURRENT_HOSTNAME/127.0.1.1\t$NEW_HOSTNAME/g" /etc/hosts
+    ASK_TO_REBOOT=1
+  fi
 
-set_config_var() {
-  lua - "$1" "$2" "$3" <<EOF > "$3.bak"
-local key=assert(arg[1])
-local value=assert(arg[2])
-local fn=assert(arg[3])
-local file=assert(io.open(fn))
-local made_change=false
-for line in file:lines() do
-  if line:match("^#?%s*"..key.."=.*$") then
-    line=key.."="..value
-    made_change=true
-  end
-  print(line)
-end
 
-if not made_change then
-  print(key.."="..value)
-end
-EOF
-mv "$3.bak" "$3"
+
 }
 
 clear_config_var() {
@@ -195,9 +101,6 @@ do_overscan() {
 }
 
 do_change_pass() {
-  whiptail --msgbox "You will now be asked to enter a new password for the pi user" 20 60 1
-  passwd pi &&
-  whiptail --msgbox "Password changed successfully" 20 60 1
 }
 
 do_configure_keyboard() {
@@ -210,27 +113,6 @@ do_change_timezone() {
 }
 
 do_change_hostname() {
-  if [ "$INTERACTIVE" = True ]; then
-    whiptail --msgbox "\
-Please note: RFCs mandate that a hostname's labels \
-may contain only the ASCII letters 'a' through 'z' (case-insensitive), 
-the digits '0' through '9', and the hyphen.
-Hostname labels cannot begin or end with a hyphen. 
-No other symbols, punctuation characters, or blank spaces are permitted.\
-" 20 70 1
-  fi
-  CURRENT_HOSTNAME=`cat /etc/hostname | tr -d " \t\n\r"`
-  if [ "$INTERACTIVE" = True ]; then
-    NEW_HOSTNAME=$(whiptail --inputbox "Please enter a hostname" 20 60 "$CURRENT_HOSTNAME" 3>&1 1>&2 2>&3)
-  else
-    NEW_HOSTNAME=$1
-    true
-  fi
-  if [ $? -eq 0 ]; then
-    echo $NEW_HOSTNAME > /etc/hostname
-    sed -i "s/127.0.1.1.*$CURRENT_HOSTNAME/127.0.1.1\t$NEW_HOSTNAME/g" /etc/hosts
-    ASK_TO_REBOOT=1
-  fi
 }
 
 do_memory_split() {
@@ -243,76 +125,9 @@ set_memory_split() {
 }
 
 do_overclock() {
-  if [ "$INTERACTIVE" = True ]; then
-    whiptail --msgbox "\
-Be aware that overclocking may reduce the lifetime of your
-Raspberry Pi. If overclocking at a certain level causes
-system instability, try a more modest overclock. Hold down
-shift during boot to temporarily disable overclock.
-See http://elinux.org/RPi_Overclocking for more information.\
-" 20 70 1
-    OVERCLOCK=$(whiptail --menu "Choose overclock preset" 20 60 10 \
-      "None" "700MHz ARM, 250MHz core, 400MHz SDRAM, 0 overvolt" \
-      "Modest" "800MHz ARM, 250MHz core, 400MHz SDRAM, 0 overvolt" \
-      "Medium" "900MHz ARM, 250MHz core, 450MHz SDRAM, 2 overvolt" \
-      "High" "950MHz ARM, 250MHz core, 450MHz SDRAM, 6 overvolt" \
-      "Turbo" "1000MHz ARM, 500MHz core, 600MHz SDRAM, 6 overvolt" \
-      "Pi2" "1000MHz ARM, 500MHz core, 500MHz SDRAM, 2 overvolt" \
-      3>&1 1>&2 2>&3)
-  else
-    OVERCLOCK=$1
-    true
-  fi
-  if [ $? -eq 0 ]; then
-    case "$OVERCLOCK" in
-      None)
-        clear_overclock
-        ;;
-      Modest)
-        set_overclock Modest 800 250 400 0
-        ;;
-      Medium)
-        set_overclock Medium 900 250 450 2
-        ;;
-      High)
-        set_overclock High 950 250 450 6
-        ;;
-      Turbo)
-        set_overclock Turbo 1000 500 600 6
-        ;;
-      Pi2)
-        set_overclock Pi2 1000 500 500 2
-        ;;
-      Pi2None)
-        clear_overclock
-        ;;
-      *)
-        whiptail --msgbox "Programmer error, unrecognised overclock preset" 20 60 2
-        return 1
-        ;;
-    esac
-    ASK_TO_REBOOT=1
-  fi
 }
 
 set_overclock() {
-  set_config_var arm_freq $2 $CONFIG &&
-  set_config_var core_freq $3 $CONFIG &&
-  set_config_var sdram_freq $4 $CONFIG &&
-  set_config_var over_voltage $5 $CONFIG &&
-  if [ "$INTERACTIVE" = True ]; then
-    whiptail --msgbox "Set overclock to preset '$1'" 20 60 2
-  fi
-}
-
-clear_overclock () {
-  clear_config_var arm_freq $CONFIG &&
-  clear_config_var core_freq $CONFIG &&
-  clear_config_var sdram_freq $CONFIG &&
-  clear_config_var over_voltage $CONFIG &&
-  if [ "$INTERACTIVE" = True ]; then
-    whiptail --msgbox "Set overclock to preset 'None'" 20 60 2
-  fi
 }
 
 do_ssh() {
@@ -375,89 +190,9 @@ do_boot_behaviour_new() {
 }
 
 do_wait_for_network() {
-  get_init_sys
-  if [ $SYSTEMD -eq 0 ]; then
-    whiptail --msgbox "This option can only be selected when using systemd" 20 60 2
-    return 1
-  fi
-  if [ "$INTERACTIVE" = True ]; then
-    RET=$(whiptail --menu "Choose boot option" 20 70 10 \
-      "Fast" "Boot without waiting for network connection" \
-      "Slow" "Wait for network connection before completing boot" \
-      3>&1 1>&2 2>&3)
-  else
-    get_init_sys
-    RET=$1
-    true
-  fi
-  if [ $? -eq 0 ]; then
-    case "$RET" in
-      Fast)
-        rm /etc/systemd/system/dhcpcd.service.d/wait.conf
-        ;;
-      Slow)
-        mkdir -p /etc/systemd/system/dhcpcd.service.d/
-        cat > /etc/systemd/system/dhcpcd.service.d/wait.conf << EOF
-[Service]
-ExecStart=
-ExecStart=/sbin/dhcpcd -q -w
-EOF
-        ;;
-      *)
-        whiptail --msgbox "Programmer error, unrecognised option" 20 60 2
-        return 1
-        ;;
-    esac
-  fi
 }
 
 do_boot_behaviour() {
-  if [ "$INTERACTIVE" = True ]; then
-    BOOTOPT=$(whiptail --menu "Choose boot option" 20 60 10 \
-      "Console" "Text console, requiring login (default)" \
-      "Desktop" "Log in as user 'pi' at the graphical desktop" \
-      3>&1 1>&2 2>&3)
-  else
-    get_init_sys
-    BOOTOPT=$1
-    true
-  fi
-  if [ $? -eq 0 ]; then
-    case "$BOOTOPT" in
-      Console)
-        if [ -e /etc/init.d/lightdm ]; then
-          if [ $SYSTEMD -eq 1 ]; then
-            systemctl set-default multi-user.target
-          else
-            update-rc.d lightdm disable 2
-          fi
-        fi
-        ;;
-      Desktop)
-        if [ -e /etc/init.d/lightdm ]; then
-          if id -u pi > /dev/null 2>&1; then
-            if [ $SYSTEMD -eq 1 ]; then
-              systemctl set-default graphical.target
-            else
-              update-rc.d lightdm enable 2
-            fi
-            sed /etc/lightdm/lightdm.conf -i -e "s/^#autologin-user=.*/autologin-user=pi/"
-            disable_raspi_config_at_boot
-          else
-            whiptail --msgbox "The pi user has been removed, can't set up boot to desktop" 20 60 2
-          fi
-        else
-          whiptail --msgbox "Do sudo apt-get install lightdm to allow configuration of boot to desktop" 20 60 2
-          return 1
-        fi
-        ;;
-      *)
-        whiptail --msgbox "Programmer error, unrecognised boot option" 20 60 2
-        return 1
-        ;;
-    esac
-    ASK_TO_REBOOT=1
-  fi
 }
 
 do_rastrack() {
