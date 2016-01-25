@@ -1,0 +1,34 @@
+do_monitoring_tools() {
+  FUN=$(whiptail --title "Raspberry Pi Software Configuration Tool (raspi-config)" --menu "Install Monitoring Tools" $WT_HEIGHT $WT_WIDTH $WT_MENU_HEIGHT --cancel-button Back --ok-button Select \
+    "A1 "RPi-Monitor" "" \
+    "A2 "Raspcontrol" \
+    "A3 " \
+    "A4 " \
+    "A5 " \
+    "A6 " \
+    "A7 " \
+    "A8 " \
+    "A9 " \
+    "AA " \
+    "A0 Update" "Update this tool to the latest version" \
+    3>&1 1>&2 2>&3)
+  RET=$?
+  if [ $RET -eq 1 ]; then
+    return 0
+  elif [ $RET -eq 0 ]; then
+    case "$FUN" in
+      A1\ *) do_rpi_monitor ;;
+      A2\ *) do_raspcontrol ;;
+      A3\ *) do_ ;;
+      A4\ *) do_ssh ;;
+      A5\ *) do_devicetree ;;
+      A6\ *) do_spi ;;
+      A7\ *) do_i2c ;;
+      A8\ *) do_serial ;;
+      A9\ *) do_audio ;;
+      AA\ *) do_gldriver ;;
+      A0\ *) do_update ;;
+      *) whiptail --msgbox "Programmer error: unrecognized option" 20 60 1 ;;
+    esac || whiptail --msgbox "There was an error running option $FUN" 20 60 1
+  fi
+}
