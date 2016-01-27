@@ -1,7 +1,7 @@
 do_update() {
-  apt-get update &&
-  apt-get install raspi-config &&
-  printf "Sleeping 5 seconds before reloading raspi-config\n" &&
+  wget https://erikhein.net/raspi-server-conf.sh
+  chmod 777 raspi-server-conf.sh  
+  printf "Sleeping 5 seconds before reloading raspi-server-config\n" &&
   sleep 5 &&
   exec raspi-config
 }
